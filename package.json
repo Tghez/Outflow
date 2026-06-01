@@ -1,0 +1,26 @@
+{
+  "name": "outflow",
+  "private": true,
+  "workspaces": [
+    "shared",
+    "backend",
+    "web"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=backend",
+    "web": "npm run dev --workspace=web",
+    "scrape": "npm run scrape --workspace=backend",
+    "db:migrate": "npm run db:migrate --workspace=backend",
+    "db:seed": "npm run db:seed --workspace=backend",
+    "db:seed-demo": "npm run db:seed-demo --workspace=backend",
+    "db:studio": "npm run db:studio --workspace=backend",
+    "build": "npm run build --workspaces"
+  },
+  "engines": {
+    "node": ">=22.14.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.100.1",
+    "langsmith": "^0.7.3"
+  }
+}
