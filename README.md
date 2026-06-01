@@ -1,4 +1,4 @@
-﻿# Outflow — AI-Powered Personal Finance for Israeli Banks
+﻿# Outflow — AI-Powered Personal Finance Tracker
 
 > Automatic expense tracking for Israeli bank and credit card accounts. Outflow scrapes your accounts daily, categorizes every transaction with AI, tracks your budgets in real time, and delivers a personal financial advisor — all in one place.
 
