@@ -1,18 +1,21 @@
-import { useEffect, useState } from 'react'
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
+import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { formatAgorot } from '@outflow/shared'
-import type { MonthlyTotal, CategoryBreakdown } from '@outflow/shared'
-import { getMonthlyInsights, getCategoryInsights } from '../api/insights.js'
+import type { MonthlyTotal, BudgetWithSpent } from '@outflow/shared'
+import { getMonthlyInsights } from '../api/insights.js'
 import { getBudgets } from '../api/budgets.js'
-import type { BudgetWithSpent } from '@outflow/shared'
+import { BudgetTile } from '../components/BudgetTile.js'
 import { Spinner } from '../components/ui/Spinner.js'
-import { PageHeader } from '../components/layout/PageHeader.js'
-import { ProgressBar } from '../components/ui/ProgressBar.js'
-import { AmountDisplay } from '../components/ui/AmountDisplay.js'
 
 function currentMonth() {
   const now = new Date()
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+}
+
+function addMonths(month: string, delta: number) {
+  const [y, m] = month.split('-').map(Number)
+  const d = new Date(y, m - 1 + delta, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
 function monthHe(month: string) {
@@ -21,23 +24,25 @@ function monthHe(month: string) {
 }
 
 export function Dashboard() {
-  const month = currentMonth()
+  const now = currentMonth()
+  const [selectedMonth, setSelectedMonth] = useState(now)
   const [summary, setSummary] = useState<MonthlyTotal | null>(null)
-  const [categories, setCategories] = useState<CategoryBreakdown[]>([])
   const [budgets, setBudgets] = useState<BudgetWithSpent[]>([])
   const [loading, setLoading] = useState(true)
+  const tileRefs = useRef<(HTMLDivElement | null)[]>([])
 
   useEffect(() => {
+    setLoading(true)
     async function load() {
       try {
-        const [monthly, cats, buds] = await Promise.all([
-          getMonthlyInsights(1),
-          getCategoryInsights(month),
-          getBudgets(month),
+        const monthIndex = monthsBetween(selectedMonth, now)
+        const [monthlies, buds] = await Promise.all([
+          getMonthlyInsights(Math.max(monthIndex + 1, 1)),
+          getBudgets(selectedMonth),
         ])
-        setSummary(monthly[0] ?? null)
-        setCategories(cats.slice(0, 6))
-        setBudgets(buds.slice(0, 3))
+        const found = monthlies.find((m) => m.month === selectedMonth) ?? monthlies[0] ?? null
+        setSummary(found)
+        setBudgets(buds)
       } catch (err) {
         console.error(err)
       } finally {
@@ -45,95 +50,121 @@ export function Dashboard() {
       }
     }
     void load()
-  }, [month])
+  }, [selectedMonth])
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Spinner />
-      </div>
+  useEffect(() => {
+    if (loading) return
+    tileRefs.current = tileRefs.current.slice(0, budgets.length)
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) {
+            e.target.classList.add('visible')
+            observer.unobserve(e.target)
+          }
+        })
+      },
+      { threshold: 0.08 }
     )
+    tileRefs.current.forEach((el) => el && observer.observe(el))
+    return () => observer.disconnect()
+  }, [budgets, loading])
+
+  function prevMonth() {
+    setSelectedMonth((m) => addMonths(m, -1))
   }
 
-  return (
-    <div className="p-4 space-y-6">
-      <PageHeader title="בית" subtitle={monthHe(month)} />
+  function nextMonth() {
+    if (selectedMonth < now) setSelectedMonth((m) => addMonths(m, 1))
+  }
 
-      {/* Income vs Expenses */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-          <p className="text-xs text-green-600 font-medium mb-1">הכנסות</p>
-          <AmountDisplay agorot={summary?.incomeAgorot ?? 0} className="text-lg" />
+  const isCurrentMonth = selectedMonth === now
+
+  return (
+    <div className="min-h-screen bg-brand-bg">
+      {/* Sticky month header */}
+      <header className="sticky top-0 z-40 bg-brand-bg/95 backdrop-blur border-b border-brand-light/40 px-5 py-3 flex items-center justify-between">
+        <button
+          onClick={nextMonth}
+          disabled={isCurrentMonth}
+          className="w-9 h-9 flex items-center justify-center rounded-full text-brand-accent disabled:opacity-30 hover:bg-brand-light/30 transition-colors text-lg"
+          aria-label="חודש הבא"
+        >
+          ◀
+        </button>
+        <h1 className="font-bold text-brand-text text-base">{monthHe(selectedMonth)}</h1>
+        <button
+          onClick={prevMonth}
+          className="w-9 h-9 flex items-center justify-center rounded-full text-brand-accent hover:bg-brand-light/30 transition-colors text-lg"
+          aria-label="חודש קודם"
+        >
+          ▶
+        </button>
+      </header>
+
+      <div className="px-4 pt-5 pb-32 space-y-6">
+        {/* Hero tiles */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="tile-animate-1 bg-brand-surface border border-brand-light/60 rounded-2xl p-5 shadow-sm">
+            <p className="text-xs font-semibold text-brand-muted mb-2 tracking-wide uppercase">הכנסות</p>
+            <p className="text-2xl font-bold text-green-600">
+              {loading ? '—' : formatAgorot(summary?.incomeAgorot ?? 0)}
+            </p>
+          </div>
+          <div className="tile-animate-2 bg-brand-surface border border-brand-light rounded-2xl p-5 shadow-sm">
+            <p className="text-xs font-semibold text-brand-muted mb-2 tracking-wide uppercase">הוצאות</p>
+            <p className="text-2xl font-bold text-brand-accent">
+              {loading ? '—' : formatAgorot(summary?.expensesAgorot ?? 0)}
+            </p>
+          </div>
         </div>
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-          <p className="text-xs text-red-600 font-medium mb-1">הוצאות</p>
-          <AmountDisplay agorot={-(summary?.expensesAgorot ?? 0)} className="text-lg" />
+
+        {/* Budget section */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <Link to="/settings" className="text-xs font-semibold text-brand-accent hover:underline">
+              ניהול תקציבים ←
+            </Link>
+            <h2 className="text-base font-bold text-brand-text">התקציבים שלך</h2>
+          </div>
+
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <Spinner />
+            </div>
+          ) : budgets.length === 0 ? (
+            <div className="text-center py-12 px-6">
+              <p className="text-4xl mb-3">🎯</p>
+              <p className="text-brand-text font-semibold mb-1">טרם הוגדרו תקציבים</p>
+              <p className="text-brand-muted text-sm mb-4">הגדר תקציבים לקטגוריות כדי לעקוב אחר ההוצאות שלך</p>
+              <Link
+                to="/settings"
+                className="inline-block px-5 py-2.5 bg-brand-accent text-white rounded-xl text-sm font-semibold hover:bg-brand-dark transition-colors"
+              >
+                הוסף תקציב
+              </Link>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {budgets.map((b, i) => (
+                <BudgetTile
+                  key={b.id}
+                  budget={b}
+                  month={selectedMonth}
+                  ref={(el) => { tileRefs.current[i] = el }}
+                  style={{ transitionDelay: `${i * 80}ms` }}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
-
-      {/* Category Donut */}
-      {categories.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-          <h2 className="text-sm font-semibold text-gray-700 mb-3">התפלגות לפי קטגוריה</h2>
-          <ResponsiveContainer width="100%" height={200}>
-            <PieChart>
-              <Pie
-                data={categories}
-                cx="50%"
-                cy="50%"
-                innerRadius={55}
-                outerRadius={90}
-                dataKey="totalAgorot"
-                nameKey="nameHe"
-              >
-                {categories.map((cat) => (
-                  <Cell key={cat.categoryId} fill={cat.color} />
-                ))}
-              </Pie>
-              <Tooltip
-                formatter={(value: number) => formatAgorot(value)}
-                contentStyle={{ direction: 'rtl', fontFamily: 'Heebo' }}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            {categories.map((cat) => (
-              <div key={cat.categoryId} className="flex items-center gap-1.5 text-xs">
-                <span
-                  className="w-2.5 h-2.5 rounded-full shrink-0"
-                  style={{ backgroundColor: cat.color }}
-                />
-                <span className="text-gray-600 truncate">{cat.nameHe}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Top Budget Progress */}
-      {budgets.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-          <h2 className="text-sm font-semibold text-gray-700 mb-3">מצב תקציב</h2>
-          <div className="space-y-4">
-            {budgets.map((b) => {
-              const ratio = b.targetAmountAgorot > 0 ? b.spentAgorot / b.targetAmountAgorot : 0
-              return (
-                <div key={b.id}>
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-sm font-medium">
-                      {b.icon} {b.nameHe}
-                    </span>
-                    <span className="text-xs text-gray-500">
-                      {formatAgorot(b.spentAgorot)} מתוך {formatAgorot(b.targetAmountAgorot)}
-                    </span>
-                  </div>
-                  <ProgressBar ratio={ratio} />
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
     </div>
   )
+}
+
+function monthsBetween(a: string, b: string) {
+  const [ay, am] = a.split('-').map(Number)
+  const [by, bm] = b.split('-').map(Number)
+  return Math.abs((by - ay) * 12 + (bm - am))
 }

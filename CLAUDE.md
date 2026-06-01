@@ -35,3 +35,21 @@
 - JWT expiry: 30 days
 - Daily cron: '0 2 * * *' (02:00 local)
 - Budget thresholds: green < 80%, amber 80–100%, red >= 100%
+
+## Web Design System
+Color palette (Tailwind `brand-*` tokens):
+- `brand-bg` #FFFBF1 — page background
+- `brand-surface` #FFF2D0 — card/tile background
+- `brand-light` #FFB2B2 — soft coral accent, borders
+- `brand-accent` #E36A6A — primary CTA, active states
+- `brand-dark` #c45555 — hover on accent
+- `brand-text` #2D1A1A — primary text
+- `brand-muted` #8B6F6F — secondary/muted text
+
+Web app structure (single-page hub):
+- `/` Dashboard — hero income/expense tiles + all budget tiles (scroll-animated, expandable)
+- `/transactions` — transaction list (unchanged)
+- `/insights` — charts (unchanged)
+- `/settings` — accounts + budget management (הוסף תקציב לקטגוריה lives here)
+- AI advisor is a floating panel (AIPanel component), not a separate route
+- Budget viewing is on Dashboard; budget CRUD is in Settings
